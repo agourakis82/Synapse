@@ -119,7 +119,6 @@ mkdir -p \
   "${appdir}/usr/share/icons/hicolor/256x256/apps" \
   "${appdir}/usr/share/metainfo"
 install -m 0755 "$binary_path" "${appdir}/usr/bin/synapse-relay-gui-bin"
-node "${repo_root}/relay/scripts/prepare-gui-build-assets.mjs" --runtime-output="${appdir}/usr/lib/synapse-relay-gui/runtime"
 install -m 0644 "${repo_root}/packages/web-next/public/synapse.png" "${appdir}/usr/share/icons/hicolor/256x256/apps/synapse-relay-gui.png"
 
 cat >"${appdir}/usr/share/applications/synapse-relay-gui.desktop" <<'EOF'
@@ -155,26 +154,13 @@ curl -fsSL "https://github.com/linuxdeploy/linuxdeploy/releases/download/continu
 curl -fsSL "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" -o "$appimagetool"
 chmod +x "$linuxdeploy" "$appimagetool"
 
-runtime_library_path="$(
-  find "${appdir}/usr/lib/synapse-relay-gui/runtime" \
-    -type f \( -name '*.so' -o -name '*.so.*' \) \
-    -printf '%h\n' \
-    | sort -u \
-    | paste -sd ':' -
-)"
-linuxdeploy_env=(APPIMAGE_EXTRACT_AND_RUN=1)
-if [[ -n "$runtime_library_path" ]]; then
-  if [[ -n "${LD_LIBRARY_PATH:-}" ]]; then
-    runtime_library_path="${runtime_library_path}:${LD_LIBRARY_PATH}"
-  fi
-  linuxdeploy_env+=("LD_LIBRARY_PATH=${runtime_library_path}")
-fi
-
-env "${linuxdeploy_env[@]}" "$linuxdeploy" \
+APPIMAGE_EXTRACT_AND_RUN=1 "$linuxdeploy" \
   --appdir "$appdir" \
   -e "${appdir}/usr/bin/synapse-relay-gui-bin" \
   -d "${appdir}/usr/share/applications/synapse-relay-gui.desktop" \
   -i "${appdir}/usr/share/icons/hicolor/256x256/apps/synapse-relay-gui.png"
+
+node "${repo_root}/relay/scripts/prepare-gui-build-assets.mjs" --runtime-output="${appdir}/usr/lib/synapse-relay-gui/runtime"
 
 cat >"${appdir}/usr/bin/synapse-relay-gui" <<'EOF'
 #!/bin/sh
