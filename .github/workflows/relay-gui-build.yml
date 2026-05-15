@@ -76,10 +76,10 @@ jobs:
         env:
           MATRIX_JSON: >-
             [
-              {"runner":"ubuntu-latest","goos":"linux","goarch":"amd64","suffix":"linux-amd64","wails_tags":"desktop_cua,webkit2_41","cgo_ldflags_allow":"","wails_extra_args":"","setup":"sudo apt-get update -qq\nsudo apt-get install -y -qq libgtk-3-dev libwebkit2gtk-4.1-dev desktop-file-utils patchelf squashfs-tools"},
-              {"runner":"macos-15","goos":"darwin","goarch":"arm64","suffix":"darwin-arm64","wails_tags":"desktop_cua","cgo_ldflags_allow":"^(-weak_framework|ScreenCaptureKit)$","wails_extra_args":"","setup":""},
-              {"runner":"macos-15-intel","goos":"darwin","goarch":"amd64","suffix":"darwin-amd64","wails_tags":"desktop_cua","cgo_ldflags_allow":"^(-weak_framework|ScreenCaptureKit)$","wails_extra_args":"","setup":""},
-              {"runner":"windows-latest","goos":"windows","goarch":"amd64","suffix":"windows-amd64","ext":".exe","wails_tags":"desktop_cua","cgo_ldflags_allow":"","wails_extra_args":"-nsis","setup":"pwsh -File .github/scripts/setup-windows-gui-build.ps1"}
+              {"runner":"ubuntu-latest","goos":"linux","goarch":"amd64","suffix":"linux-amd64","wails_tags":"desktop_cua,webkit2_41","cgo_ldflags_allow":"","macos_deployment_target":"","wails_extra_args":"","setup":"sudo apt-get update -qq\nsudo apt-get install -y -qq libgtk-3-dev libwebkit2gtk-4.1-dev desktop-file-utils patchelf squashfs-tools"},
+              {"runner":"macos-15","goos":"darwin","goarch":"arm64","suffix":"darwin-arm64","wails_tags":"desktop_cua","cgo_ldflags_allow":"^(-weak_framework|ScreenCaptureKit)$","macos_deployment_target":"14.4","wails_extra_args":"","setup":""},
+              {"runner":"macos-15-intel","goos":"darwin","goarch":"amd64","suffix":"darwin-amd64","wails_tags":"desktop_cua","cgo_ldflags_allow":"^(-weak_framework|ScreenCaptureKit)$","macos_deployment_target":"14.4","wails_extra_args":"","setup":""},
+              {"runner":"windows-latest","goos":"windows","goarch":"amd64","suffix":"windows-amd64","ext":".exe","wails_tags":"desktop_cua","cgo_ldflags_allow":"","macos_deployment_target":"","wails_extra_args":"-nsis","setup":"pwsh -File .github/scripts/setup-windows-gui-build.ps1"}
             ]
           REQUESTED_PLATFORMS: ${{ github.event_name == 'workflow_dispatch' && inputs.platforms || vars.RELAY_GUI_BUILD_PLATFORMS || 'all' }}
         run: python3 .github/scripts/filter-platform-matrix.py
@@ -210,6 +210,9 @@ jobs:
         env:
           CGO_LDFLAGS_ALLOW: ${{ matrix.cgo_ldflags_allow }}
         run: |
+          if [ -n "${{ matrix.macos_deployment_target }}" ]; then
+            export MACOSX_DEPLOYMENT_TARGET="${{ matrix.macos_deployment_target }}"
+          fi
           extra_args="${{ matrix.wails_extra_args }}"
           if [ "${{ matrix.goos }}" = "windows" ]; then
             extra_args="${{ steps.windows_package_variants.outputs.wails_extra_args }}"
