@@ -47,6 +47,7 @@ portable_root="synapse-relay-gui-${suffix}-portable"
 portable_archive="synapse-relay-gui-${suffix}-portable.tar.gz"
 deb_output="synapse-relay-gui-${suffix}.deb"
 appimage_output="synapse-relay-gui-${suffix}.AppImage"
+icon_path="${repo_root}/relay/cmd/synapse-relay-gui/packaging/linux/synapse-relay-gui.png"
 
 package_version="${version#v}"
 if [[ ! "$package_version" =~ ^[0-9] ]]; then
@@ -83,7 +84,7 @@ mkdir -p \
   "${deb_root}/DEBIAN"
 install -m 0755 "$binary_path" "${install_root}/synapse-relay-gui"
 node "${repo_root}/relay/scripts/prepare-gui-build-assets.mjs" --runtime-output="${install_root}/runtime"
-install -m 0644 "${repo_root}/packages/web-next/public/synapse.png" "${deb_root}/usr/share/icons/hicolor/256x256/apps/synapse-relay-gui.png"
+install -m 0644 "$icon_path" "${deb_root}/usr/share/icons/hicolor/256x256/apps/synapse-relay-gui.png"
 ln -s /opt/synapse-relay-gui/synapse-relay-gui "${deb_root}/usr/bin/synapse-relay-gui"
 
 cat >"${deb_root}/usr/share/applications/synapse-relay-gui.desktop" <<'EOF'
@@ -119,7 +120,7 @@ mkdir -p \
   "${appdir}/usr/share/icons/hicolor/256x256/apps" \
   "${appdir}/usr/share/metainfo"
 install -m 0755 "$binary_path" "${appdir}/usr/bin/synapse-relay-gui-bin"
-install -m 0644 "${repo_root}/packages/web-next/public/synapse.png" "${appdir}/usr/share/icons/hicolor/256x256/apps/synapse-relay-gui.png"
+install -m 0644 "$icon_path" "${appdir}/usr/share/icons/hicolor/256x256/apps/synapse-relay-gui.png"
 
 cat >"${appdir}/usr/share/applications/synapse-relay-gui.desktop" <<'EOF'
 [Desktop Entry]
