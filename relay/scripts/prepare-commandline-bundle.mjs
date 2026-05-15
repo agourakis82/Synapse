@@ -22,7 +22,7 @@ import { fileURLToPath } from "node:url"
 import { resolveRequiredSubprojectRoot } from "./lib/subprojects.mjs"
 
 const DEFAULT_NODE_VERSION = "24.14.1"
-const DEFAULT_PYTHON_VERSION = "3.14.1"
+const DEFAULT_PYTHON_VERSION = "3.13.10"
 const DEFAULT_PYTHON_STANDALONE_RELEASE = "20251202"
 const DEFAULT_WINDOWS_GIT_VERSION = "2.49.0.windows.1"
 const DEFAULT_FFMPEG_RELEASE_TAG = "n7.1-2"
@@ -49,7 +49,7 @@ const PYTHON_DISTRIBUTIONS = {
   },
   "darwin-amd64": {
     distribution: "x86_64-apple-darwin-install_only_stripped",
-    pipPlatform: "macosx_10_13_x86_64",
+    pipPlatform: "macosx_11_0_x86_64",
   },
   "darwin-arm64": {
     distribution: "aarch64-apple-darwin-install_only_stripped",
@@ -128,7 +128,7 @@ const PYTHON_REQUIREMENTS = [
   "lxml==6.0.2",
   "mutagen==1.47.0",
   "openpyxl==3.1.5",
-  "pandas==3.0.2",
+  "pandas==2.3.2",
   "pdfplumber==0.11.4",
   "Pillow==12.2.0",
   "pydub==0.25.1",
@@ -145,6 +145,9 @@ const PYTHON_REQUIREMENTS = [
   "tinytag==2.0.0",
   "xlrd==2.0.1",
 ]
+
+// Cross-platform pip installs require wheels; prebuild known pure-Python sdists.
+const PURE_PYTHON_SOURCE_WHEEL_REQUIREMENTS = ["pyaes==1.6.1"]
 
 const NODE_MODULE_PRUNE_DIRS = new Set([
   "__image_snapshots__",
@@ -378,6 +381,7 @@ function getCommandlineAssetVersion(
     nodeAssetVersion,
     nodeDependencies: NODE_DEPENDENCIES,
     pythonRequirements: PYTHON_REQUIREMENTS,
+    purePythonSourceWheelRequirements: PURE_PYTHON_SOURCE_WHEEL_REQUIREMENTS,
     managedProviders: managedProviders.map((provider) => ({
       slug: provider.slug,
       displayName: provider.displayName,
@@ -641,6 +645,32 @@ async function installPythonPackages(
       targetDirectory,
       "-r",
       requirementsPath,
+    ],
+    {
+      shell: process.platform === "win32",
+    }
+  )
+}
+
+async function preparePurePythonSourceWheelhouse(wheelhouseDirectory) {
+  if (PURE_PYTHON_SOURCE_WHEEL_REQUIREMENTS.length === 0) {
+    return
+  }
+
+  const hostPython =
+    process.env.PYTHON || (process.platform === "win32" ? "python" : "python3")
+  await mkdir(wheelhouseDirectory, { recursive: true })
+  await runCommand(
+    hostPython,
+    [
+      "-m",
+      "pip",
+      "wheel",
+      "--disable-pip-version-check",
+      "--no-deps",
+      "--wheel-dir",
+      wheelhouseDirectory,
+      ...PURE_PYTHON_SOURCE_WHEEL_REQUIREMENTS,
     ],
     {
       shell: process.platform === "win32",
@@ -1177,7 +1207,8 @@ async function installManagedPythonPackages(
   pythonVersion,
   targetDirectory,
   providers,
-  providerRoots
+  providerRoots,
+  wheelhouseDirectory
 ) {
   const pythonSpec = PYTHON_DISTRIBUTIONS[targetPlatform]
   if (!pythonSpec) {
@@ -1210,6 +1241,9 @@ async function installManagedPythonPackages(
       "--target",
       targetDirectory,
     ]
+    if (wheelhouseDirectory) {
+      pipArgs.push("--find-links", wheelhouseDirectory)
+    }
     const shouldAllowSourceDists =
       installSpec.allowSourceDists &&
       targetPlatform === getNativeTargetPlatform()
@@ -1595,12 +1629,14 @@ async function main() {
     const pythonArchivePath = join(workDir, pythonSpec.archiveFileName)
     const pythonExtractDir = join(workDir, "python-extract")
     const pythonPackageDir = join(workDir, "python-site-packages")
+    const pythonSourceWheelhouseDir = join(workDir, "python-source-wheelhouse")
     const gitExtractDir = join(workDir, "git-extract")
     const ffmpegDownloadDir = join(workDir, "ffmpeg-downloads")
 
     await mkdir(nodePackageDir, { recursive: true })
     await mkdir(pythonExtractDir, { recursive: true })
     await mkdir(pythonPackageDir, { recursive: true })
+    await mkdir(pythonSourceWheelhouseDir, { recursive: true })
     await mkdir(gitExtractDir, { recursive: true })
     await mkdir(ffmpegDownloadDir, { recursive: true })
 
@@ -1625,6 +1661,7 @@ async function main() {
     console.log(
       `Installing bundled Python packages (${options.packageProfile})`
     )
+    await preparePurePythonSourceWheelhouse(pythonSourceWheelhouseDir)
     await installPythonPackages(
       options.targetPlatform,
       options.pythonVersion,
@@ -1635,7 +1672,8 @@ async function main() {
       options.pythonVersion,
       pythonPackageDir,
       managedProviderManifest,
-      providerRoots
+      providerRoots,
+      pythonSourceWheelhouseDir
     )
     await installCliAnythingExtraPythonPackages(
       options.targetPlatform,
