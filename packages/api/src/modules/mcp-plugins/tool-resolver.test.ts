@@ -7,6 +7,7 @@ const spec = (rel: string) => fileURLToPath(new URL(rel, import.meta.url))
 
 let visible = true
 let executions = 0
+let visibilityChecks = 0
 const plugin: VisiblePluginRow = {
   installationId: "installation-1",
   ownerWorkspaceId: "workspace-1",
@@ -23,7 +24,17 @@ const plugin: VisiblePluginRow = {
 
 mock.module(spec("./repo.ts"), {
   namedExports: {
-    loadVisiblePluginRows: async () => (visible ? [plugin] : []),
+    loadVisiblePluginRows: async () => [plugin],
+    isPluginInstallationVisible: async (
+      params: { workspaceId: string; conversationId: string },
+      installationId: string
+    ) => {
+      assert.equal(params.workspaceId, "workspace-1")
+      assert.equal(params.conversationId, "conversation-1")
+      assert.equal(installationId, plugin.installationId)
+      visibilityChecks++
+      return visible
+    },
   },
 })
 mock.module(spec("./config-resolver.ts"), {
@@ -87,8 +98,10 @@ test("revoked plugin grant prevents execution through an existing resolver", asy
 
   await resolved.executor(toolId, {})
   assert.equal(executions, 1)
+  assert.equal(visibilityChecks, 1)
 
   visible = false
   await assert.rejects(resolved.executor(toolId, {}), /no longer authorized/i)
   assert.equal(executions, 1)
+  assert.equal(visibilityChecks, 2)
 })

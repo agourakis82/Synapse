@@ -22,7 +22,11 @@ import {
 } from "./instance-manager.js"
 import { getMcpVersion } from "./runtime-version.js"
 import { normalizeMcpToolResult } from "./result-normalizer.js"
-import { loadVisiblePluginRows, type VisiblePluginRow } from "./repo.js"
+import {
+  isPluginInstallationVisible,
+  loadVisiblePluginRows,
+  type VisiblePluginRow,
+} from "./repo.js"
 
 const log = createLogger("mcp.tool-resolver")
 
@@ -282,11 +286,8 @@ async function resolveMcpToolsCommon(
     const origin: ToolResultOrigin = toPublicOrigin(ref)
 
     try {
-      const visiblePlugins = await loadVisiblePluginRows(params)
       if (
-        !visiblePlugins.some(
-          (plugin) => plugin.installationId === instance.installationId
-        )
+        !(await isPluginInstallationVisible(params, instance.installationId))
       ) {
         throw new Error(`Plugin tool ${toolId} is no longer authorized`)
       }
