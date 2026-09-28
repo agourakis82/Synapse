@@ -282,6 +282,14 @@ async function resolveMcpToolsCommon(
     const origin: ToolResultOrigin = toPublicOrigin(ref)
 
     try {
+      const visiblePlugins = await loadVisiblePluginRows(params)
+      if (
+        !visiblePlugins.some(
+          (plugin) => plugin.installationId === instance.installationId
+        )
+      ) {
+        throw new Error(`Plugin tool ${toolId} is no longer authorized`)
+      }
       const rawOutput = await instance.execute(
         upstreamToolName,
         input,
