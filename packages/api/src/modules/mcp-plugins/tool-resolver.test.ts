@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mock, test } from "node:test"
+import { beforeEach, mock, test } from "node:test"
 import { fileURLToPath } from "node:url"
 import type { VisiblePluginRow } from "./repo.js"
 
@@ -8,6 +8,14 @@ const spec = (rel: string) => fileURLToPath(new URL(rel, import.meta.url))
 let visible = true
 let executions = 0
 let visibilityChecks = 0
+let executionError: Error | undefined
+
+beforeEach(() => {
+  visible = true
+  executions = 0
+  visibilityChecks = 0
+  executionError = undefined
+})
 const plugin: VisiblePluginRow = {
   installationId: "installation-1",
   ownerWorkspaceId: "workspace-1",
@@ -64,6 +72,7 @@ mock.module(spec("./instance-manager.ts"), {
       ],
       execute: async () => {
         executions++
+        if (executionError) throw executionError
         return "pong"
       },
     }),
@@ -101,7 +110,45 @@ test("revoked plugin grant prevents execution through an existing resolver", asy
   assert.equal(visibilityChecks, 1)
 
   visible = false
-  await assert.rejects(resolved.executor(toolId, {}), /no longer authorized/i)
+  await assert.rejects(resolved.executor(toolId, {}), (error: unknown) => {
+    assert.ok(error instanceof Error)
+    assert.match(error.message, /no longer authorized/i)
+    assert.equal(
+      (error as Error & { requiresReplan?: boolean }).requiresReplan,
+      true
+    )
+    assert.ok("origin" in error)
+    return true
+  })
   assert.equal(executions, 1)
   assert.equal(visibilityChecks, 2)
+
+  visible = true
+  await resolved.executor(toolId, {})
+  assert.equal(executions, 2)
+  assert.equal(visibilityChecks, 3)
+})
+
+test("ordinary plugin failures do not request a tool replan", async () => {
+  const resolved = await resolveMcpToolsForRemoteAgent({
+    workspaceId: "workspace-1",
+    remoteAgentId: "remote-agent-1",
+    sessionId: "session-1",
+    conversationId: "conversation-1",
+  })
+  const toolId = resolved.tools[0]?.ref.toolId
+  assert.ok(toolId)
+  executionError = new Error("Plugin request failed")
+
+  await assert.rejects(resolved.executor(toolId, {}), (error: unknown) => {
+    assert.equal(error, executionError)
+    assert.equal(
+      (error as Error & { requiresReplan?: boolean }).requiresReplan,
+      undefined
+    )
+    assert.ok(error instanceof Error && "origin" in error)
+    return true
+  })
+  assert.equal(executions, 1)
+  assert.equal(visibilityChecks, 1)
 })

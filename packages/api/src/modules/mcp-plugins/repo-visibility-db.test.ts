@@ -14,7 +14,7 @@ const databasePath = fileURLToPath(
 test(
   "installation visibility is rechecked after a grant is revoked",
   { timeout: 5 * 60_000 },
-  async () => {
+  async (t) => {
     await withTestDb(async (db) => {
       const databaseMock = mock.module(databasePath, {
         namedExports: { ...database, db },
@@ -109,10 +109,19 @@ test(
           .returning("id")
           .executeTakeFirstOrThrow()
 
+        const conversation = await db
+          .insertInto("conversations")
+          .values({
+            workspaceId: workspace.id,
+            kind: "group",
+            title: "plugin visibility test",
+          })
+          .returning("id")
+          .executeTakeFirstOrThrow()
         const context = {
           workspaceId: workspace.id,
-          conversationId: crypto.randomUUID(),
-          conversationKind: "direct" as const,
+          conversationId: conversation.id,
+          conversationKind: "group" as const,
         }
         assert.deepEqual(
           (await buildPluginVisibilitySubjectIds(context, true)).subjectIds,
@@ -122,6 +131,9 @@ test(
           await isPluginInstallationVisible(context, installationId),
           true
         )
+        await t.test("an empty installation ID fails closed", async () => {
+          assert.equal(await isPluginInstallationVisible(context, ""), false)
+        })
 
         await db
           .updateTable("workspaceResourceGrants")
@@ -132,6 +144,119 @@ test(
           await isPluginInstallationVisible(context, installationId),
           false
         )
+
+        const conversationSubjectId = await upsertAccessSubject(db, {
+          kind: SUBJECT_KIND.CONVERSATION,
+          conversationId: conversation.id,
+        })
+        await db
+          .insertInto("workspaceResourceGrants")
+          .values({
+            workspaceId: workspace.id,
+            workspaceResourceId: installationId,
+            subjectId: conversationSubjectId,
+            permissions: ["use"],
+            status: "active",
+          })
+          .execute()
+        // Actorless workspace callers can still use a conversation grant.
+        assert.equal(
+          await isPluginInstallationVisible(context, installationId),
+          true
+        )
+
+        for (const kind of [SUBJECT_KIND.ACTOR, SUBJECT_KIND.REMOTE_AGENT]) {
+          await t.test(
+            `${kind} conversation grants require active participation`,
+            async () => {
+              const principalId = crypto.randomUUID()
+              await db
+                .insertInto("workspaceResources")
+                .values({
+                  id: principalId,
+                  workspaceId: workspace.id,
+                  kind,
+                  displayName: "plugin visibility principal",
+                  createdBySubjectId: subjectId,
+                  status: "active",
+                })
+                .execute()
+              if (kind === SUBJECT_KIND.ACTOR) {
+                await db
+                  .insertInto("actors")
+                  .values({
+                    id: principalId,
+                    role: "assistant",
+                    title: "plugin visibility actor",
+                    currentVersion: 1,
+                  })
+                  .execute()
+              } else {
+                await db
+                  .insertInto("remoteAgents")
+                  .values({
+                    id: principalId,
+                    title: "plugin visibility agent",
+                    runtimeKind: "claude_code",
+                  })
+                  .execute()
+              }
+              const principalSubjectId = await upsertAccessSubject(
+                db,
+                kind === SUBJECT_KIND.ACTOR
+                  ? { kind, actorId: principalId }
+                  : { kind, remoteAgentId: principalId }
+              )
+              const principalContext = {
+                ...context,
+                ...(kind === SUBJECT_KIND.ACTOR
+                  ? { actorId: principalId }
+                  : { remoteAgentId: principalId }),
+              }
+              // A conversation-only grant must not recover an absent participant.
+              assert.equal(
+                await isPluginInstallationVisible(
+                  principalContext,
+                  installationId
+                ),
+                false
+              )
+              const participant = await db
+                .insertInto("conversationParticipants")
+                .values({
+                  conversationId: conversation.id,
+                  subjectId: principalSubjectId,
+                  roleKey: "member",
+                  state: "active",
+                })
+                .returning("id")
+                .executeTakeFirstOrThrow()
+              assert.equal(
+                await isPluginInstallationVisible(
+                  principalContext,
+                  installationId
+                ),
+                true
+              )
+              await db
+                .updateTable("conversationParticipants")
+                .set({ state: "left" })
+                .where("id", "=", participant.id)
+                .execute()
+              assert.equal(
+                await isPluginInstallationVisible(
+                  principalContext,
+                  installationId
+                ),
+                false
+              )
+              assert.deepEqual(
+                await buildPluginVisibilitySubjectIds(principalContext),
+                { subjectIds: [], runtimeScopeSubjectIds: [] }
+              )
+            }
+          )
+        }
       } finally {
         databaseMock.restore()
       }

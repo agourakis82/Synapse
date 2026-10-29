@@ -289,7 +289,10 @@ async function resolveMcpToolsCommon(
       if (
         !(await isPluginInstallationVisible(params, instance.installationId))
       ) {
-        throw new Error(`Plugin tool ${toolId} is no longer authorized`)
+        throw Object.assign(
+          new Error(`Plugin tool ${toolId} is no longer authorized`),
+          { requiresReplan: true }
+        )
       }
       const rawOutput = await instance.execute(
         upstreamToolName,

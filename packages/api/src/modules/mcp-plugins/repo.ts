@@ -1577,35 +1577,38 @@ export async function buildPluginVisibilitySubjectIds(
   readOnly = false
 ) {
   const subjects = await buildVisibilitySubjects(params)
-  const resolvedSubjectIds = await Promise.all(
-    subjects.map((subject) =>
-      (readOnly ? findAccessSubjectId : upsertAccessSubject)(db, {
-        kind: resolveVisibilitySubjectKind(subject.type),
-        ...(subject.type === "workspace" ? { workspaceId: subject.id } : {}),
-        ...(subject.type === "workspace_member"
-          ? { workspaceMemberId: subject.id }
-          : {}),
-        ...(subject.type === "actor" ? { actorId: subject.id } : {}),
-        ...(subject.type === "remote_agent"
-          ? { remoteAgentId: subject.id }
-          : {}),
-      } as any)
-    )
-  )
+  if (subjects.length === 0) {
+    return { subjectIds: [], runtimeScopeSubjectIds: [] }
+  }
+  const resolveSubjectId = readOnly ? findAccessSubjectId : upsertAccessSubject
+  const [resolvedSubjectIds, conversationSubjectId] = await Promise.all([
+    Promise.all(
+      subjects.map((subject) =>
+        resolveSubjectId(db, {
+          kind: resolveVisibilitySubjectKind(subject.type),
+          ...(subject.type === "workspace" ? { workspaceId: subject.id } : {}),
+          ...(subject.type === "workspace_member"
+            ? { workspaceMemberId: subject.id }
+            : {}),
+          ...(subject.type === "actor" ? { actorId: subject.id } : {}),
+          ...(subject.type === "remote_agent"
+            ? { remoteAgentId: subject.id }
+            : {}),
+        } as any)
+      )
+    ),
+    params.conversationId
+      ? resolveSubjectId(db, {
+          kind: SUBJECT_KIND.CONVERSATION,
+          conversationId: params.conversationId,
+        })
+      : Promise.resolve(null),
+  ])
   const subjectIds = resolvedSubjectIds.filter(
     (id): id is string => id !== null
   )
 
-  let conversationSubjectId: string | null = null
-  if (params.conversationId) {
-    conversationSubjectId = await (
-      readOnly ? findAccessSubjectId : upsertAccessSubject
-    )(db, {
-      kind: SUBJECT_KIND.CONVERSATION,
-      conversationId: params.conversationId,
-    })
-    if (conversationSubjectId) subjectIds.push(conversationSubjectId)
-  }
+  if (conversationSubjectId) subjectIds.push(conversationSubjectId)
 
   return {
     subjectIds,
@@ -1792,6 +1795,7 @@ async function loadVisiblePluginRowsForQuery(
   params: LoadVisiblePluginRowsParams,
   installationId?: string
 ): Promise<VisiblePluginRow[]> {
+  if (installationId === "") return []
   const { subjectIds, runtimeScopeSubjectIds } =
     await buildPluginVisibilitySubjectIds(params, installationId !== undefined)
   if (subjectIds.length === 0) return []
@@ -1813,7 +1817,7 @@ async function loadVisiblePluginRowsForQuery(
           ])
         : eb("resource_grant.scopeSubjectId", "is", null)
     )
-  if (installationId) {
+  if (installationId !== undefined) {
     grantQuery = grantQuery.where(
       "resource_grant.workspaceResourceId",
       "=",
