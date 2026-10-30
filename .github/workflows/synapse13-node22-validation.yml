@@ -1,0 +1,56 @@
+name: Synapse13 Node22 bounded validation
+
+on:
+  push:
+    branches: [diagnostic/synapse13-node22-20261029]
+
+permissions:
+  contents: read
+
+jobs:
+  node22-boundary-and-focused-tests:
+    runs-on: ubuntu-latest
+    env:
+      ALLOW_MISSING_FS_HELPER: "1"
+      # Run the unchanged script's build/guard/lint/typecheck layers. Its full
+      # test tail includes cargo test, which is outside the current ADR009 scope.
+      VERIFY_SKIP_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: e2a1dcae7c8124833c19c4d5ec3329835f1137c8
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Record exact source and runtime
+        run: |
+          git rev-parse HEAD
+          node --version
+          npm --version
+      - name: Install dependencies
+        run: npm ci
+      - name: Install mobile-app dependencies
+        run: npm --prefix packages/mobile-app ci
+      - name: Boundary build, guards, lint and typechecks
+        run: npm run verify:boundary
+      - name: Focused plugin tests including real PostgreSQL
+        run: >-
+          node --import tsx --test --experimental-test-module-mocks
+          packages/api/src/modules/mcp-plugins/tool-resolver.test.ts
+          packages/api/src/modules/mcp-plugins/repo-visibility.test.ts
+          packages/api/src/modules/mcp-plugins/repo-visibility-db.test.ts
+
+  secret-scan-exact-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: e2a1dcae7c8124833c19c4d5ec3329835f1137c8
+          fetch-depth: 0
+      - name: Run repository-pinned scanner with redaction
+        run: |
+          bin="$(bash scripts/ensure-gitleaks.sh)"
+          "$bin" git --redact --no-banner \
+            --config "$GITHUB_WORKSPACE/.gitleaks.toml" \
+            --baseline-path "$GITHUB_WORKSPACE/.gitleaks-baseline.json"
