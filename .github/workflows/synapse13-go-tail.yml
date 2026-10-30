@@ -1,4 +1,4 @@
-name: Synapse13 exact-source Go tail diagnostic
+name: Synapse13 exact-source Cargo tail diagnostic
 
 on:
   push:
@@ -8,19 +8,16 @@ permissions:
   contents: read
 
 jobs:
-  original-go-tail:
+  original-cargo-tail:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: cc771093df02bc769a551cd862944761698ea0ff
+          ref: 11952cb4dbbf45e574b71b146c606426e068fc33
       - name: Record exact source and runtime
         run: |
           git rev-parse HEAD
-          go version
-      - name: Install declared DeskAct X11 build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes libx11-dev libxtst-dev libxinerama-dev libxrandr-dev libxcomposite-dev libxrender-dev libxfixes-dev
-      - name: Run original Go tail
-        run: (cd sidecars/cua && go test ./...)
+          cargo --version
+          rustc --version
+      - name: Run original Cargo tail
+        run: (cd sidecars/fs-helper && cargo test)
