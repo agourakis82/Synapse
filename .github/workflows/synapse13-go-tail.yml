@@ -1,4 +1,4 @@
-name: Synapse13 exact-source Cargo tail diagnostic
+name: Synapse13 exact-source working-set diagnostic
 
 on:
   push:
@@ -8,16 +8,35 @@ permissions:
   contents: read
 
 jobs:
-  original-cargo-tail:
+  original-working-set-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: 11952cb4dbbf45e574b71b146c606426e068fc33
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
       - name: Record exact source and runtime
         run: |
           git rev-parse HEAD
           cargo --version
           rustc --version
-      - name: Run original Cargo tail
-        run: (cd sidecars/fs-helper && cargo test)
+          node --version
+          npm --version
+      - name: Install locked Node dependencies
+        run: npm ci
+      - name: Build real filesystem helper in canonical debug location
+        run: |
+          (cd sidecars/fs-helper && cargo build)
+          test -x sidecars/fs-helper/target/debug/synapse-device-fs-helper
+          sha256sum sidecars/fs-helper/target/debug/synapse-device-fs-helper
+      - name: Build official workspace dependency chain
+        run: |
+          npm run build -w packages/device-protocol
+          npm run build -w packages/shared
+          npm run build -w packages/device-runtime
+          npm run build -w packages/device-sdk
+      - name: Run original complete working-set bridge test file
+        run: npx tsx --test --experimental-test-module-mocks packages/api/src/modules/sandbox/working-set-bridge.test.ts
