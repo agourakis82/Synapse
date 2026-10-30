@@ -33,9 +33,21 @@ jobs:
       - name: Install Linux test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes bubblewrap git-lfs
+          sudo apt-get install --yes bubblewrap git-lfs apparmor-profiles
           bwrap --version
           git lfs version
+      - name: Load packaged Bubblewrap policy when required
+        run: |
+          restriction=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          if [ -f "$restriction" ] && [ "$(cat "$restriction")" = "1" ]; then
+            profile=/usr/share/apparmor/extra-profiles/bwrap-userns-restrict
+            test -f "$profile"
+            dpkg-query --search "$profile"
+            sha256sum "$profile"
+            sudo apparmor_parser -r "$profile"
+            test "$(cat "$restriction")" = "1"
+          fi
+          test "$(id -u)" -ne 0
       - name: Materialize host toolchain archives
         run: |
           git lfs pull --include="packages/device-runtime-bundles-linux-x64/bundles/*"
