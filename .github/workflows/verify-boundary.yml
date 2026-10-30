@@ -43,7 +43,10 @@ jobs:
       - name: Install Linux test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes bubblewrap git-lfs apparmor-profiles
+          sudo apt-get install --yes \
+            bubblewrap git-lfs apparmor-profiles \
+            libx11-dev libxtst-dev libxinerama-dev libxrandr-dev \
+            libxcomposite-dev libxrender-dev libxfixes-dev
           bwrap --version
           git lfs version
       - name: Load packaged Bubblewrap policy when required
