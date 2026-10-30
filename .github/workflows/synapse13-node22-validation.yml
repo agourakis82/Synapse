@@ -1,4 +1,4 @@
-name: Synapse13 Node22 bounded validation
+name: Synapse13 full gate validation
 
 on:
   push:
@@ -8,13 +8,12 @@ permissions:
   contents: read
 
 jobs:
-  node22-boundary-and-focused-tests:
+  node22-full-boundary-and-focused-tests:
     runs-on: ubuntu-latest
     env:
       ALLOW_MISSING_FS_HELPER: "1"
-      # Run the unchanged script's build/guard/lint/typecheck layers. Its full
-      # test tail includes cargo test, which is outside the current ADR009 scope.
-      VERIFY_SKIP_TESTS: "1"
+      # The contributor explicitly authorized all languages for upstream work.
+      VERIFY_SKIP_TESTS: "0"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,11 +27,14 @@ jobs:
           git rev-parse HEAD
           node --version
           npm --version
+          go version
+          cargo --version
+          rustc --version
       - name: Install dependencies
         run: npm ci
       - name: Install mobile-app dependencies
         run: npm --prefix packages/mobile-app ci
-      - name: Boundary build, guards, lint and typechecks
+      - name: Complete unchanged boundary gate including Go and Rust tests
         run: npm run verify:boundary
       - name: Focused plugin tests including real PostgreSQL
         run: >-
@@ -53,4 +55,26 @@ jobs:
           bin="$(bash scripts/ensure-gitleaks.sh)"
           "$bin" git --redact --no-banner \
             --config "$GITHUB_WORKSPACE/.gitleaks.toml" \
-            --baseline-path "$GITHUB_WORKSPACE/.gitleaks-baseline.json"
+            --baseline-path "$GITHUB_WORKSPACE/.gitleaks-baseline.json" \
+            --report-format json --report-path "$RUNNER_TEMP/gitleaks-redacted.json"
+      - name: Retain finding locations only
+        if: always()
+        run: |
+          node --input-type=module <<'JS'
+          import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+          const root = process.env.RUNNER_TEMP;
+          const input = root + '/gitleaks-redacted.json';
+          if (existsSync(input)) {
+            const fields = ['RuleID', 'File', 'StartLine', 'EndLine', 'Commit', 'Fingerprint', 'Description'];
+            const rows = JSON.parse(readFileSync(input, 'utf8')).map(row =>
+              Object.fromEntries(fields.map(key => [key, row[key]])));
+            writeFileSync(root + '/gitleaks-metadata.json', JSON.stringify(rows, null, 2));
+            console.log('Finding locations retained: ' + rows.length);
+          }
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scanner-finding-locations
+          path: ${{ runner.temp }}/gitleaks-metadata.json
+          if-no-files-found: ignore
