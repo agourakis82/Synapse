@@ -30,6 +30,22 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
+      - name: Install Linux test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap git-lfs
+          bwrap --version
+          git lfs version
+      - name: Materialize host toolchain archives
+        run: |
+          git lfs pull --include="packages/device-runtime-bundles-linux-x64/bundles/*"
+          for archive in packages/device-runtime-bundles-linux-x64/bundles/*.tar.gz; do
+            expected="$(basename "$archive" .tar.gz)"
+            printf '%s  %s\n' "$expected" "$archive" | sha256sum --check -
+            stat --printf='%n %s bytes\n' "$archive"
+            tar -tzf "$archive" > "$RUNNER_TEMP/$expected.contents"
+            sed -n '1,3p' "$RUNNER_TEMP/$expected.contents"
+          done
       - name: Install dependencies
         run: npm ci
       - name: Install mobile-app dependencies
