@@ -31,10 +31,9 @@ jobs:
           --health-retries 10
     env:
       REDIS_URL: redis://127.0.0.1:6379
-      # The fs-helper is a Rust sidecar not needed for the boundary contract;
-      # let pretest skip its rebuild so the gate is deterministic in CI. The
-      # helper-backed test cases skip cleanly when the binary is absent.
-      ALLOW_MISSING_FS_HELPER: "1"
+      # The API materialization tests require the real helper. Build failures
+      # must stop the gate rather than silently omit helper-backed coverage.
+      ALLOW_MISSING_FS_HELPER: "0"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -76,5 +75,7 @@ jobs:
         # install it; its typecheck (pretypecheck → sync:shared → tsc) needs
         # its own node_modules.
         run: npm --prefix packages/mobile-app ci
+      - name: Build filesystem helper
+        run: npm run build:fs-helper
       - name: verify:boundary
         run: npm run verify:boundary
