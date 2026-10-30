@@ -18,5 +18,9 @@ jobs:
         run: |
           git rev-parse HEAD
           go version
-      - name: Run original Go tail without additional prerequisites
+      - name: Install declared DeskAct X11 build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libx11-dev libxtst-dev libxinerama-dev libxrandr-dev libxcomposite-dev libxrender-dev libxfixes-dev
+      - name: Run original Go tail
         run: (cd sidecars/cua && go test ./...)
