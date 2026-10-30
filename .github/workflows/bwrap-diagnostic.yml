@@ -1,0 +1,39 @@
+name: bwrap-host-preconditions
+on:
+  push:
+    branches: [diag/bwrap-preconditions-20261029]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-and-private-controls:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 3
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Install original bubblewrap dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends bubblewrap libcap2-bin
+      - name: Prepare minimal dependencies from existing pinned lock
+        run: |
+          node .github/diagnostics/bwrap-lock-subset.mjs
+          npm ci --prefix probe-deps --no-audit --no-fund
+          ln -s probe-deps/node_modules node_modules
+      - name: Run unchanged test and bounded private controls
+        run: bash .github/diagnostics/bwrap-probe.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: bwrap-preconditions-${{ matrix.os }}
+          path: bwrap-evidence/
+          retention-days: 7
