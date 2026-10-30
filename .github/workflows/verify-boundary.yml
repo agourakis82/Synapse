@@ -19,7 +19,18 @@ permissions:
 jobs:
   verify-boundary:
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 127.0.0.1:6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     env:
+      REDIS_URL: redis://127.0.0.1:6379
       # The fs-helper is a Rust sidecar not needed for the boundary contract;
       # let pretest skip its rebuild so the gate is deterministic in CI. The
       # helper-backed test cases skip cleanly when the binary is absent.
