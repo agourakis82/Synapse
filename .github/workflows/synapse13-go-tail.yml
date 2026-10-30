@@ -1,0 +1,22 @@
+name: Synapse13 exact-source Go tail diagnostic
+
+on:
+  push:
+    branches: [diagnostic/synapse13-go-tail-20261029]
+
+permissions:
+  contents: read
+
+jobs:
+  original-go-tail:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cc771093df02bc769a551cd862944761698ea0ff
+      - name: Record exact source and runtime
+        run: |
+          git rev-parse HEAD
+          go version
+      - name: Run original Go tail without additional prerequisites
+        run: (cd sidecars/cua && go test ./...)
